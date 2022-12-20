@@ -2,10 +2,6 @@
 
 This is a Terraform module that deploys a Dockerized Lambda function to AWS using ECR, EFS and Lambda.
 
-- AWS Lambda
-- VPC
-- EFS
-- ECR
 
 ## Inputs
 
