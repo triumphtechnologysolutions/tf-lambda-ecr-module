@@ -1,6 +1,5 @@
 import json
 from transformers import pipeline
-# EFS_MOUNT_POINT = os.environ.get('EFS_MOUNT_POINT')
 
 summarizer = pipeline("summarization")
 
