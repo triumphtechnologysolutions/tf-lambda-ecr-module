@@ -11,12 +11,15 @@ resource "aws_ecr_repository" "this" {
   image_scanning_configuration {
     scan_on_push = true
   }
+  tags = {
+    Project = var.org
+    Stage   = var.env
+  }
 }
 
 resource "null_resource" "ecr_image" {
   triggers = {
-    python_file = md5(file("./lambda/lambda.py"))
-    docker_file = md5(file("./lambda/Dockerfile"))
+    source_code_hash = data.archive_file.lambda.output_base64sha256
   }
 
   provisioner "local-exec" {
@@ -29,6 +32,10 @@ resource "null_resource" "ecr_image" {
     interpreter = ["bash", "-c"] # For Linux/MacOS
     working_dir = "./lambda"
   }
+  depends_on = [
+    aws_ecr_repository.this,
+    data.archive_file.lambda
+  ]
 }
 
 data "aws_ecr_image" "lambda_image" {
@@ -108,23 +115,23 @@ resource "aws_security_group" "lambda" {
     cidr_blocks      = ["0.0.0.0/0"]
     ipv6_cidr_blocks = ["::/0"]
   }
+  tags = {
+    Project = var.org
+    Stage   = var.env
+  }
 }
-# data "archive_file" "lambda" {
-#   type             = "zip"
-#   source_dir       = "${path.module}/lambda"
-#   output_file_mode = "0666"
-#   output_path      = "${path.module}/tmp/lambda/lambda.zip"
-# }
+data "archive_file" "lambda" {
+  type             = "zip"
+  source_dir       = "${path.module}/lambda"
+  output_file_mode = "0666"
+  output_path      = "${path.module}/tmp/lambda/lambda.zip"
+}
 
 resource "aws_lambda_function" "this" {
   package_type = "Image"
-#   filename = "${path.module}/tmp/lambda/lambda.zip"
-#   source_code_hash = data.archive_file.lambda.output_base64sha256
   function_name = "${var.org}-lambda-${var.env}"
   role          = aws_iam_role.lambda_role.arn
-#   handler       = "lambda.lambda_handler"
   image_uri     = "${aws_ecr_repository.this.repository_url}:latest"
-#   runtime       = "python3.8"
   
   ephemeral_storage {
     size = 1024
@@ -150,15 +157,11 @@ resource "aws_lambda_function" "this" {
   }
 
   depends_on = [
-    aws_ecr_repository.this,
-    null_resource.ecr_image,
-    data.aws_ecr_image.lambda_image,
-    aws_iam_role_policy_attachment.lambda_logs
+    null_resource.ecr_image
   ]
-  lifecycle {
-    ignore_changes = [
-      source_code_hash
-    ]
+  tags = {
+    Project = var.org
+    Stage   = var.env
   }
 }
 
@@ -166,6 +169,11 @@ resource "aws_lambda_function" "this" {
 resource "aws_cloudwatch_log_group" "lambda" {
   name              = "${var.org}-lambda-logs-${var.env}"
   retention_in_days = 7
+
+  tags = {
+    Project = var.org
+    Stage   = var.env
+  }
 }
 
 # EFS file system
@@ -175,6 +183,10 @@ resource "aws_efs_file_system" "this" {
 
   lifecycle_policy {
     transition_to_ia = "AFTER_7_DAYS"
+  }
+  tags = {
+    Project = var.org
+    Stage   = var.env
   }
 }
 
@@ -225,6 +237,10 @@ resource "aws_security_group" "efs" {
     protocol    = "tcp"
     cidr_blocks = [var.vpc_cidr]
   }
+  tags = {
+    Project = var.org
+    Stage   = var.env
+  }
 }
 
 resource "aws_efs_mount_target" "this" {
@@ -251,5 +267,9 @@ resource "aws_efs_access_point" "lambda" {
       owner_uid   = 1000
       permissions = 755
     }
+  }
+  tags = {
+    Project = var.org
+    Stage   = var.env
   }
 }
